@@ -5,12 +5,17 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, 
 from database import (
     get_watermarks, get_watermark, is_banned, is_processing,
     set_processing, clear_processing, log_task, add_user,
-    get_state, set_state, update_state, clear_state
+    get_state, set_state, clear_state
 )
-from utils.helpers import download_file, upload_file, cleanup, get_output_path, wm_summary
+from utils.helpers import upload_file, cleanup, get_output_path, wm_summary
 from watermark.ffmpeg_text import apply_text_watermark
 from watermark.ffmpeg_image import apply_image_watermark
 from config import MAX_FILE_SIZE, TEMP_DIR
+
+
+def _progress_bar(pct: int, length: int = 12) -> str:
+    filled = int(length * pct / 100)
+    return "[" + "█" * filled + "░" * (length - filled) + "]"
 
 
 def register_video_handlers(app: Client):
@@ -30,22 +35,22 @@ def register_video_handlers(app: Client):
             await message.reply_text("❌ You are banned from using this bot.")
             return
 
-        # Check file type for documents
+        # Check file type for documents — only accept video MIME
         if message.document:
             mime = message.document.mime_type or ""
             if not mime.startswith("video/"):
-                return  # Not a video document
+                return
 
         # Check size
-        file_size = message.video.file_size if message.video else message.document.file_size
-        if file_size and file_size > MAX_FILE_SIZE:
+        file_size = (message.video.file_size if message.video else message.document.file_size) or 0
+        if file_size > MAX_FILE_SIZE:
             await message.reply_text(
                 f"❌ File too large! Maximum supported size is **2 GB**.\n"
                 f"Your file: `{file_size / 1024**3:.2f} GB`"
             )
             return
 
-        # Check if already processing
+        # One active task per user
         if is_processing(user_id):
             await message.reply_text(
                 "⏳ You already have a video being processed. Please wait for it to finish."
@@ -65,14 +70,14 @@ def register_video_handlers(app: Client):
             )
             return
 
-        # Store video message reference
+        # Save the message ID so we can re-fetch it when the user picks a watermark
         set_state(user_id, {
             "step": "awaiting_wm_selection",
             "video_message_id": message.id,
             "chat_id": message.chat.id,
         })
 
-        # Show watermark selection keyboard
+        # Build watermark selection keyboard
         buttons = []
         for i, wm in enumerate(watermarks):
             name = wm.get("name", f"Watermark {i+1}")
@@ -81,36 +86,16 @@ def register_video_handlers(app: Client):
             buttons.append([InlineKeyboardButton(f"{icon} {name}", callback_data=f"apply_wm_{wm_id}")])
 
         buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_apply")])
-        keyboard = InlineKeyboardMarkup(buttons)
 
         await message.reply_text(
-            "🎬 **Video received!**\n\n"
-            "Which watermark would you like to apply?",
-            reply_markup=keyboard,
+            "🎬 **Video received!**\n\nWhich watermark would you like to apply?",
+            reply_markup=InlineKeyboardMarkup(buttons),
         )
 
     @app.on_callback_query(filters.regex("^cancel_apply$"))
     async def cancel_apply(client: Client, callback_query: CallbackQuery):
         clear_state(callback_query.from_user.id)
         await callback_query.message.edit_text("❌ Watermark application cancelled.")
-
-    @app.on_callback_query(filters.regex(r"^apply_wm_preview_(.+)$"))
-    async def preview_wm(client: Client, callback_query: CallbackQuery):
-        user_id = callback_query.from_user.id
-        wm_id = callback_query.matches[0].group(1)
-        wm = await get_watermark(user_id, wm_id)
-        if not wm:
-            await callback_query.answer("Watermark not found!", show_alert=True)
-            return
-        summary = wm_summary(wm)
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Apply This", callback_data=f"apply_wm_{wm_id}")],
-            [InlineKeyboardButton("🔙 Back", callback_data="cancel_apply")],
-        ])
-        await callback_query.message.edit_text(
-            f"**Watermark Preview**\n\n{summary}",
-            reply_markup=keyboard,
-        )
 
     @app.on_callback_query(filters.regex(r"^apply_wm_(.+)$"))
     async def apply_wm_callback(client: Client, callback_query: CallbackQuery):
@@ -136,46 +121,60 @@ def register_video_handlers(app: Client):
         clear_state(user_id)
         set_processing(user_id)
 
-        progress_msg = await callback_query.message.edit_text("⬇️ **Downloading video...**\n[░░░░░░░░░░░░] `0%`")
+        progress_msg = await callback_query.message.edit_text(
+            f"⬇️ **Downloading video...**\n{_progress_bar(0)} `0%`"
+        )
 
         input_path = None
         output_path = None
 
         try:
-            # Fetch the original video message
+            # Re-fetch the original video message
             video_msg = await client.get_messages(chat_id, video_message_id)
 
-            # Download
-            async def dl_progress(pct):
-                bar = "█" * int(12 * pct / 100) + "░" * (12 - int(12 * pct / 100))
-                try:
-                    await progress_msg.edit_text(
-                        f"⬇️ **Downloading video...**\n[{bar}] `{pct}%`"
-                    )
-                except Exception:
-                    pass
+            # Build a safe destination path with .mp4 extension
+            ts = int(time.time())
+            input_path = os.path.join(TEMP_DIR, f"input_{user_id}_{ts}.mp4")
 
-            input_path = await video_msg.download(
-                file_name=f"{TEMP_DIR}/",
-                progress=lambda c, t: None,  # placeholder
+            # Track last reported percent to avoid Telegram flood
+            last_pct = [-1]
+
+            async def dl_progress(current, total):
+                if not total:
+                    return
+                pct = int(current / total * 100)
+                if pct - last_pct[0] >= 5 or pct >= 99:
+                    last_pct[0] = pct
+                    try:
+                        await progress_msg.edit_text(
+                            f"⬇️ **Downloading video...**\n{_progress_bar(pct)} `{pct}%`"
+                        )
+                    except Exception:
+                        pass
+
+            # Single download into our explicit temp path
+            await video_msg.download(file_name=input_path, progress=dl_progress)
+
+            if not os.path.exists(input_path):
+                raise FileNotFoundError(f"Download failed — file not found at {input_path}")
+
+            await progress_msg.edit_text(
+                f"⚙️ **Processing video...**\n{_progress_bar(0)} `0%`\n_Applying watermark..._"
             )
-            # Re-download with progress
-            if os.path.exists(input_path):
-                os.remove(input_path)
-            input_path = await video_msg.download(file_name=f"{TEMP_DIR}/input_{user_id}_{int(time.time())}")
 
-            await progress_msg.edit_text("⚙️ **Processing video...**\n[░░░░░░░░░░░░] `0%`\n_Applying watermark..._")
+            output_path = os.path.join(TEMP_DIR, f"output_{user_id}_{ts}.mp4")
 
-            output_path = get_output_path(input_path)
+            last_proc_pct = [-1]
 
             async def proc_progress(pct):
-                bar = "█" * int(12 * pct / 100) + "░" * (12 - int(12 * pct / 100))
-                try:
-                    await progress_msg.edit_text(
-                        f"⚙️ **Processing video...**\n[{bar}] `{pct}%`\n_Applying watermark..._"
-                    )
-                except Exception:
-                    pass
+                if pct - last_proc_pct[0] >= 5:
+                    last_proc_pct[0] = pct
+                    try:
+                        await progress_msg.edit_text(
+                            f"⚙️ **Processing video...**\n{_progress_bar(pct)} `{pct}%`\n_Applying watermark..._"
+                        )
+                    except Exception:
+                        pass
 
             wm_type = wm.get("type", "text")
             success = False
@@ -187,7 +186,7 @@ def register_video_handlers(app: Client):
                 if not os.path.exists(logo_path):
                     await progress_msg.edit_text(
                         "❌ The logo file for this watermark is missing.\n"
-                        "Please re-create the watermark with /addwatermark."
+                        "Please re-create the image watermark with /addwatermark."
                     )
                     await log_task(user_id, "failed", wm_type, "logo missing")
                     return
@@ -196,13 +195,14 @@ def register_video_handlers(app: Client):
             if not success:
                 await progress_msg.edit_text(
                     "❌ **Processing failed!**\n\n"
-                    "There was an error while applying the watermark. "
-                    "Please try again or contact support."
+                    "FFmpeg could not apply the watermark. Please try again or use /addwatermark to recreate your preset."
                 )
                 await log_task(user_id, "failed", wm_type, "ffmpeg error")
                 return
 
-            await progress_msg.edit_text("⬆️ **Uploading video...**\n[░░░░░░░░░░░░] `0%`")
+            await progress_msg.edit_text(
+                f"⬆️ **Uploading video...**\n{_progress_bar(0)} `0%`"
+            )
 
             wm_name = wm.get("name", "Watermark")
             uploaded = await upload_file(
@@ -218,7 +218,7 @@ def register_video_handlers(app: Client):
                 await log_task(user_id, "completed", wm_type)
             else:
                 await progress_msg.edit_text(
-                    "❌ **Upload failed!**\n\nThe processed video could not be sent. Please try again."
+                    "❌ **Upload failed!**\n\nCould not send the video back. Please try again."
                 )
                 await log_task(user_id, "failed", wm_type, "upload error")
 
@@ -227,7 +227,7 @@ def register_video_handlers(app: Client):
             await log_task(user_id, "failed", error=str(e))
             try:
                 await progress_msg.edit_text(
-                    f"❌ **An error occurred:**\n`{str(e)[:200]}`\n\nPlease try again."
+                    f"❌ **An error occurred:**\n`{str(e)[:300]}`\n\nPlease try again."
                 )
             except Exception:
                 pass
