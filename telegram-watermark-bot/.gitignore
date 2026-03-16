@@ -1,0 +1,15 @@
+# Pyrogram session files (contain auth credentials — never commit)
+*.session
+*.session-journal
+
+# Temp processing files
+temp/*.mp4
+temp/*.jpg
+temp/*.png
+temp/*.webp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
