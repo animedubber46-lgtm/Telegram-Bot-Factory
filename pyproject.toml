@@ -1,0 +1,12 @@
+[project]
+name = "repl-nix-workspace"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = [
+    "motor==3.3.2",
+    "pymongo==4.6.1",
+    "pyrogram==2.0.106",
+    "python-dotenv==1.0.0",
+    "tgcrypto==1.2.5",
+]
