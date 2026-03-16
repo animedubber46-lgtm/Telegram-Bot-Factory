@@ -1,0 +1,218 @@
+Create a production-ready Telegram bot in Python that adds watermarks to videos without noticeably reducing visual quality and without unnecessarily increasing file size. The bot must support videos up to 2 GB. Use Pyrogram for Telegram handling, FFmpeg for video processing, and MongoDB for storing users, saved watermarks, settings, and task history.
+
+Project goal:
+Build a Telegram watermark bot where users can save multiple watermark presets and apply them to videos later. The bot should support both text watermark mode and image watermark mode. It should ask the user which saved watermark to use whenever they send a video. The bot must be optimized for high-quality output, stable processing, and clean Telegram UX.
+
+Main requirements:
+
+1. Core bot setup
+- Language: Python
+- Telegram library: Pyrogram
+- Database: MongoDB using MONGO_URI
+- Use these environment variables:
+  - API_ID
+  - API_HASH
+  - BOT_TOKEN
+  - OWNER_ID
+  - MONGO_URI
+- Include requirements.txt
+- Include Procfile
+- Include README.md
+- Include sample .env
+- Include clear project structure
+- Code should be ready for deployment on VPS, Render, or Heroku-like platforms
+
+2. Video watermarking requirements
+- Accept videos up to 2 GB
+- Preserve original video quality as much as possible
+- Avoid major loss in resolution, bitrate, and audio quality
+- Avoid huge file size increase after processing
+- Keep original duration, FPS, and audio unless user changes something
+- Use efficient FFmpeg commands
+- Support MP4, MKV, and MOV if possible
+- Show progress while processing
+- Handle large file downloads/uploads properly
+- Clean temp files after task completion
+
+3. Watermark modes
+A. Text watermark mode
+- User can create and save text watermarks
+- Text options:
+  - watermark text
+  - font size
+  - font color
+  - opacity
+  - font style
+  - bold/italic if possible
+  - outline or shadow
+  - background box optional
+  - position
+  - animation
+
+B. Image watermark mode
+- User can upload logo/image as watermark
+- Store watermark image in bot storage/database reference
+- Image options:
+  - position
+  - opacity
+  - size/scale
+  - margin x/y
+  - optional animation
+- Prefer PNG support with transparency
+
+4. Saved watermark system
+- Each user can save multiple watermark presets
+- Number them like:
+  - Watermark 1
+  - Watermark 2
+  - Watermark 3
+- Store all watermark details in MongoDB
+- When user sends a video:
+  - bot asks which saved watermark to use
+  - show inline keyboard with all saved watermark presets
+  - allow preview of watermark info before applying
+- Add options:
+  - Create new watermark
+  - Edit watermark
+  - Delete watermark
+  - Rename watermark
+  - Apply watermark to current video
+
+5. Watermark customization features
+- Position options:
+  - top-left
+  - top-right
+  - bottom-left
+  - bottom-right
+  - center
+  - custom x/y
+- Opacity control
+- Text color selection
+- Text style selection
+- Animation feature
+  - static
+  - fade in
+  - fade out
+  - blinking
+  - sliding from left/right
+  - floating subtle motion if feasible
+- Margin/padding control
+- Image scaling
+- Rotation optional if possible
+
+6. User flow
+- /start command with nice welcome message
+- User sends video
+- Bot checks whether user has saved watermarks
+- If yes:
+  - ask “Which watermark do you want to apply?”
+  - show saved watermarks as numbered buttons
+- If no:
+  - ask user to create one first
+- After watermark selection:
+  - apply watermark
+  - send final processed video back
+- Add commands:
+  - /start
+  - /help
+  - /mywatermarks
+  - /addwatermark
+  - /settings
+  - /cancel
+
+7. Owner/admin features
+- OWNER_ID based admin control
+- Admin can:
+  - broadcast message
+  - view total users
+  - view total processed videos
+  - view bot stats
+  - ban/unban users
+  - see processing logs
+- Log major actions to terminal or log channel if added later
+
+8. Database schema ideas
+Use MongoDB collections like:
+- users
+- watermarks
+- tasks
+- bans
+Store:
+- user_id
+- username
+- saved watermarks
+- watermark type
+- text/image settings
+- created_at
+- updated_at
+- video processing history
+
+9. Quality-preserving FFmpeg behavior
+- Re-encode only when necessary
+- Use high-quality CRF/preset settings
+- Keep audio stream quality high
+- Maintain original resolution by default
+- Make watermark overlay efficient
+- Avoid unnecessary resizing
+- Use safe FFmpeg escaping for text
+- Add separate FFmpeg logic for:
+  - text watermark
+  - image watermark
+  - animated watermark if selected
+
+10. Telegram UX
+- Use inline keyboards
+- Use conversation/state flow
+- Clean messages
+- Progress updates for:
+  - downloading
+  - processing
+  - uploading
+- Proper error handling
+- Cancel option during setup
+- Friendly messages for failed processing
+- Prevent spam by limiting one active task per user
+
+11. Extra stability features
+- Queue or lock processing per user
+- Handle floodwait
+- Handle invalid files
+- Handle corrupt images/logos
+- Handle FFmpeg not found
+- Handle oversized files
+- Auto delete temp files after task done
+- Make code modular and clean
+
+12. File structure
+Generate full code with files such as:
+- bot.py or main.py
+- config.py
+- database.py
+- helpers/
+- watermark/
+- handlers/
+- utils/
+- requirements.txt
+- Procfile
+- README.md
+- .env.example
+
+13. Output expectation
+I want full working source code, not only explanation.
+Generate complete files with proper imports.
+Use clean modular structure.
+Add deployment instructions.
+Add sample MongoDB models.
+Add FFmpeg commands used.
+Add comments in code where needed.
+Make the bot practical and ready to run after filling env variables.
+
+Important behavior:
+- Bot must save user watermark presets permanently in MongoDB
+- When a user uploads a video, bot must ask which saved watermark to apply
+- Text mode and image mode must both work
+- Customization options must include position, opacity, color, text style, and animation
+- Must support videos up to 2 GB
+- Must preserve quality as much as possible
+- Must avoid unnecessary file size increase
+- Use efficient and realistic FFmpeg implementation
