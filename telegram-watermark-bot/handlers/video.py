@@ -52,7 +52,9 @@ def register_video_handlers(app: Client):
             )
             return
 
-        await add_user(user_id, message.from_user.username, message.from_user.full_name)
+        u = message.from_user
+        full_name = f"{u.first_name or ''} {u.last_name or ''}".strip()
+        await add_user(user_id, u.username, full_name)
 
         # Get saved watermarks
         watermarks = await get_watermarks(user_id)

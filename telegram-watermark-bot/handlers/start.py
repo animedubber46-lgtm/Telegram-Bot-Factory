@@ -66,7 +66,8 @@ def register_start_handlers(app: Client):
             await message.reply_text("❌ You are banned from using this bot.")
             return
 
-        await add_user(user.id, user.username, user.full_name)
+        full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+        await add_user(user.id, user.username, full_name)
         clear_state(user.id)
 
         keyboard = InlineKeyboardMarkup([
