@@ -13,6 +13,16 @@ MAX_WATERMARKS = 10
 
 POSITIONS = ["top-left", "top-right", "bottom-left", "bottom-right", "center"]
 ANIMATIONS = ["static", "fade-in", "fade-out", "blink", "slide-left", "slide-right", "float"]
+
+ANIMATION_LABELS = {
+    "static":     "None (No Animation)",
+    "fade-in":    "Fade In",
+    "fade-out":   "Fade Out",
+    "blink":      "Blink",
+    "slide-left": "Slide Left",
+    "slide-right":"Slide Right",
+    "float":      "Float",
+}
 COLORS = ["white", "black", "red", "yellow", "blue", "green", "cyan", "magenta", "orange"]
 
 
@@ -35,7 +45,8 @@ def anim_keyboard(cb_prefix: str) -> InlineKeyboardMarkup:
     rows = []
     row = []
     for a in ANIMATIONS:
-        row.append(InlineKeyboardButton(a.replace("-", " ").title(), callback_data=f"{cb_prefix}_{a}"))
+        label = ANIMATION_LABELS.get(a, a.replace("-", " ").title())
+        row.append(InlineKeyboardButton(label, callback_data=f"{cb_prefix}_{a}"))
         if len(row) == 2:
             rows.append(row)
             row = []
