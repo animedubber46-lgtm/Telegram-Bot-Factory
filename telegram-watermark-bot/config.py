@@ -31,6 +31,7 @@ POSITION_MAP = {
     "center":       ("(W-w)/2", "(H-h)/2"),
 }
 
-# Default font for text watermarks
-DEFAULT_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+# Fonts for text watermarks
+DEFAULT_FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+DEFAULT_FONT_BOLD    = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FALLBACK_FONT = "Arial"

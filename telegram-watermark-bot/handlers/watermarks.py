@@ -141,7 +141,7 @@ def register_watermark_handlers(app: Client):
 
     # ─── Edit field selected → prompt user ────────────────────────────────
 
-    @app.on_callback_query(filters.regex(r"^wm_ef_([^_]+)_(.+)$"))
+    @app.on_callback_query(filters.regex(r"^wm_ef_([0-9a-f]{24})_([a-z_]+)$"))
     async def edit_field_selected(client: Client, callback_query: CallbackQuery):
         user_id = callback_query.from_user.id
         wm_id = callback_query.matches[0].group(1)

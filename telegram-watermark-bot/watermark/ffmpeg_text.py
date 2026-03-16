@@ -1,12 +1,11 @@
 import os
 import asyncio
 import shlex
-from config import POSITION_MAP, DEFAULT_FONT, FALLBACK_FONT, TEMP_DIR
+from config import POSITION_MAP, DEFAULT_FONT_REGULAR, DEFAULT_FONT_BOLD, FALLBACK_FONT, TEMP_DIR
 
 
 def _escape_text(text: str) -> str:
     """Escape special characters for FFmpeg drawtext filter."""
-    # Escape backslash first, then special FFmpeg drawtext chars
     text = text.replace("\\", "\\\\")
     text = text.replace("'", "\\'")
     text = text.replace(":", "\\:")
@@ -14,32 +13,27 @@ def _escape_text(text: str) -> str:
     return text
 
 
-def _get_font() -> str:
-    if os.path.exists(DEFAULT_FONT):
-        return DEFAULT_FONT
-    # Search common paths
-    for path in [
-        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
-        "/Library/Fonts/Arial Bold.ttf",
-    ]:
-        if os.path.exists(path):
-            return path
+def _get_font(bold: bool = False) -> str:
+    """Return path to appropriate font file. Bold is achieved by using the bold font variant."""
+    if bold:
+        if os.path.exists(DEFAULT_FONT_BOLD):
+            return DEFAULT_FONT_BOLD
+    if os.path.exists(DEFAULT_FONT_REGULAR):
+        return DEFAULT_FONT_REGULAR
     return FALLBACK_FONT
 
 
 def build_text_filter(settings: dict) -> str:
     """Build FFmpeg drawtext filter string from watermark settings."""
+    bold = settings.get("bold", True)
     text = _escape_text(settings.get("text", "Watermark"))
-    font = _get_font()
+    font = _get_font(bold=bold)          # bold selects the bold font file
     fontsize = int(settings.get("font_size", 36))
     color = settings.get("font_color", "white")
     opacity = float(settings.get("opacity", 0.8))
     position = settings.get("position", "bottom-right")
     margin_x = int(settings.get("margin_x", 10))
     margin_y = int(settings.get("margin_y", 10))
-    bold = settings.get("bold", True)
     shadow = settings.get("shadow", True)
     box = settings.get("box", False)
     box_color = settings.get("box_color", "black@0.4")
@@ -64,10 +58,10 @@ def build_text_filter(settings: dict) -> str:
         parts += ["shadowcolor=black@0.5", "shadowx=2", "shadowy=2"]
 
     if box:
-        parts += [f"box=1", f"boxcolor={box_color}", "boxborderw=6"]
+        parts += ["box=1", f"boxcolor={box_color}", "boxborderw=6"]
 
-    if bold:
-        parts.append("fontstyle=bold")
+    # NOTE: fontstyle=bold is NOT supported by FFmpeg drawtext.
+    # Bold is handled above by selecting the bold font file variant.
 
     if alpha_expr:
         # Replace fontcolor opacity with animated alpha
