@@ -4,15 +4,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Telegram API credentials
-API_ID = int(os.environ.get("20899529", 0))
-API_HASH = os.environ.get("0297693c81aac01b704702f334decddd", "")
-BOT_TOKEN = os.environ.get("8135406266:AAFwKXNAG7UG2MiTE8BisT6isaUgaXNnmm4", "")
+API_ID = int(os.environ.get("API_ID", 20899529))
+API_HASH = os.environ.get("API_HASH", "0297693c81aac01b704702f334decddd")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8135406266:AAFwKXNAG7UG2MiTE8BisT6isaUgaXNnmm4")
 
 # Owner/Admin
-OWNER_ID = int(os.environ.get("8002803133", 0))
+OWNER_ID = int(os.environ.get("OWNER_ID", 8002803133))
 
 # MongoDB
-MONGO_URI = os.environ.get("mongodb+srv://sakshamranjan7:8wBCaYilCTlgdNV3@cluster0.h184m7m.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0", "")
+MONGO_URI = os.environ.get("MOGO_URI", "mongodb+srv://sakshamranjan7:8wBCaYilCTlgdNV3@cluster0.h184m7m.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
 DB_NAME = "watermark_bot"
 
 # File limits
