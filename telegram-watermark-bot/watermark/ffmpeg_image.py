@@ -44,7 +44,6 @@ def _build_image_alpha(animation: str, opacity: float) -> str:
     if animation == "blink":
         return f"if(lt(mod(t\\,1.5)\\,0.75)\\,{opacity}\\,0)"
 
-    # fade-out disabled here because duration is not safely available
     return ""
 
 
@@ -60,8 +59,11 @@ def build_image_filter(settings: dict) -> str:
 
     x_expr, y_expr = _position_to_overlay(position, margin_x, margin_y)
 
-    # Scale logo relative to input video width
-    logo_chain = f"[1:v]scale=iw*{scale_pct}/100:-1"
+    # scale logo relative to main video width using scale2ref
+    logo_chain = (
+        f"[1:v][0:v]scale2ref=w=main_w*{scale_pct}/100:h=ow/mdar[wm][base];"
+        f"[wm]format=rgba"
+    )
 
     if rotation != 0:
         logo_chain += (
@@ -69,8 +71,6 @@ def build_image_filter(settings: dict) -> str:
             f"ow=rotw({rotation}*PI/180):"
             f"oh=roth({rotation}*PI/180)"
         )
-
-    logo_chain += ",format=rgba"
 
     alpha_expr = _build_image_alpha(animation, opacity)
     if alpha_expr:
@@ -80,7 +80,6 @@ def build_image_filter(settings: dict) -> str:
 
     logo_chain += "[logo]"
 
-    # Safe animation overrides
     if animation == "slide-left":
         x_expr = f"if(lt(t\\,2)\\,-overlay_w+(t/2)*(({x_expr})+overlay_w)\\,{x_expr})"
     elif animation == "slide-right":
@@ -88,7 +87,7 @@ def build_image_filter(settings: dict) -> str:
     elif animation == "float":
         y_expr = f"({y_expr})+5*sin(2*PI*t/3)"
 
-    filter_complex = f"{logo_chain};[0:v][logo]overlay={x_expr}:{y_expr}"
+    filter_complex = f"{logo_chain};[base][logo]overlay={x_expr}:{y_expr}"
 
     return filter_complex
 
@@ -112,6 +111,7 @@ async def apply_image_watermark(
     cmd = [
         "ffmpeg",
         "-y",
+        "-hide_banner",
         "-i", input_path,
         "-i", logo_path,
         "-filter_complex", filter_complex,
@@ -120,7 +120,7 @@ async def apply_image_watermark(
         "-preset", "fast",
         "-c:a", "copy",
         "-movflags", "+faststart",
-        output_path
+        output_path,
     ]
 
     return await _run_ffmpeg(cmd, progress_callback)
