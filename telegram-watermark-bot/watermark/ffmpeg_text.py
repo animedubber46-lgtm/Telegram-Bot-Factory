@@ -3,6 +3,9 @@ import asyncio
 from config import POSITION_MAP, DEFAULT_FONT_REGULAR, DEFAULT_FONT_BOLD, FALLBACK_FONT
 
 
+FFMPEG_ERROR_LOG = "/tmp/ffmpeg_error.log"
+
+
 def _escape_text(text: str) -> str:
     """Escape special characters for FFmpeg drawtext filter."""
     text = str(text)
@@ -28,7 +31,7 @@ def _get_font(bold: bool = False) -> str:
 def _normalize_position_expr(expr: str, axis: str, margin: int) -> str:
     """
     Normalize position expressions so they work with FFmpeg drawtext.
-    Supports older map values like W-w-10 / H-h-10 and converts them.
+    Supports older values like W-w-10 / H-h-10 and converts them.
     """
     expr = str(expr).strip()
 
@@ -50,12 +53,12 @@ def _normalize_position_expr(expr: str, axis: str, margin: int) -> str:
     expr = expr.replace("h-th", "h-text_h")
 
     if axis == "x":
-        if expr in ("10", "x"):
+        if expr == "10":
             return str(margin)
         if "w-text_w-10" in expr:
             return expr.replace("w-text_w-10", f"w-text_w-{margin}")
     else:
-        if expr in ("10", "y"):
+        if expr == "10":
             return str(margin)
         if "h-text_h-10" in expr:
             return expr.replace("h-text_h-10", f"h-text_h-{margin}")
@@ -81,7 +84,7 @@ def _position_to_expr(position: str, mx: int, my: int) -> tuple[str, str]:
 def _build_alpha_expr(animation: str, opacity: float) -> str:
     """
     Build alpha expression for drawtext.
-    Only uses expressions known to work safely.
+    Only uses safe expressions.
     """
     opacity = max(0.0, min(1.0, float(opacity)))
 
@@ -97,7 +100,7 @@ def _build_alpha_expr(animation: str, opacity: float) -> str:
     if animation == "float":
         return f"{opacity}"
 
-    # Disable risky modes here unless explicitly handled elsewhere
+    # risky without extra duration handling
     if animation in ("fade-out", "slide-left", "slide-right"):
         return ""
 
@@ -155,9 +158,7 @@ def build_text_filter(settings: dict) -> str:
 
 
 def build_text_filter_with_animation(settings: dict) -> str:
-    """
-    Build final drawtext filter, including safe slide/float overrides.
-    """
+    """Build final drawtext filter, including safe slide/float overrides."""
     animation = str(settings.get("animation", "static"))
     base = build_text_filter(settings)
 
@@ -196,6 +197,7 @@ async def apply_text_watermark(
     cmd = [
         "ffmpeg",
         "-y",
+        "-hide_banner",
         "-i", input_path,
         "-vf", vf,
         "-c:v", "libx264",
@@ -217,7 +219,7 @@ async def _run_ffmpeg(cmd: list, progress_callback=None) -> bool:
         stderr=asyncio.subprocess.PIPE,
     )
 
-    stderr_lines = []
+    stderr_lines: list[str] = []
     duration = None
     last_progress = 0
 
@@ -226,7 +228,7 @@ async def _run_ffmpeg(cmd: list, progress_callback=None) -> bool:
         if not line:
             break
 
-        line_str = line.decode("utf-8", errors="replace").strip()
+        line_str = line.decode("utf-8", errors="replace").rstrip()
         stderr_lines.append(line_str)
 
         if "Duration:" in line_str and duration is None:
@@ -244,7 +246,7 @@ async def _run_ffmpeg(cmd: list, progress_callback=None) -> bool:
                 current = int(h) * 3600 + int(m) * 60 + float(s)
                 pct = min(int((current / duration) * 100), 99)
 
-                if pct > last_progress + 4:
+                if pct >= last_progress + 5:
                     last_progress = pct
                     await progress_callback(pct)
             except Exception:
@@ -253,10 +255,21 @@ async def _run_ffmpeg(cmd: list, progress_callback=None) -> bool:
     await proc.wait()
 
     if proc.returncode != 0:
-        error_text = "\n".join(stderr_lines[-30:])
+        error_text = "\n".join(stderr_lines)
+
+        try:
+            with open(FFMPEG_ERROR_LOG, "w", encoding="utf-8") as f:
+                f.write(error_text)
+        except Exception:
+            pass
+
+        short_error = "\n".join(stderr_lines[-20:])
         print("[FFmpeg Error]")
-        print(error_text)
-        raise Exception(error_text)
+        print(short_error)
+
+        raise Exception(
+            short_error + f"\n\nFull log saved at: {FFMPEG_ERROR_LOG}"
+        )
 
     if progress_callback:
         try:
